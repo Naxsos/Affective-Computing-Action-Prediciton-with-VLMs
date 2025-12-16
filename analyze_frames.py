@@ -8,7 +8,9 @@ import base64
 import argparse
 from pathlib import Path
 from openai import OpenAI
+import dotenv
 
+dotenv.load_dotenv()
 
 def encode_image_to_base64(image_path):
     """

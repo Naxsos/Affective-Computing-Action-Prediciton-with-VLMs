@@ -1,0 +1,33 @@
+{
+  "run_id": "bench_20251210_171827",
+  "model": "gpt-4o",
+  "prompt": "\n    You are analyzing a sequence of video frames from an egocentric (first-person) perspective.\n\n    Based on the sequence of actions visible in these frames, predict the next 2 most plausible actions the person will perform.\n\n    Format your response as:\n    1. [Most likely action]: Brief description\n    2. [Second most likely action]: Brief description\n\n    Be specific about the objects and actions involved.",
+  "start_time": "2025-12-10T17:18:27.465162",
+  "end_time": "2025-12-10T17:19:09.937048",
+  "summary": {
+    "total_samples": 1,
+    "total_tokens": 33313,
+    "total_cost_usd": 0.0838,
+    "avg_processing_time_seconds": 38.352060317993164,
+    "avg_accuracy_score": 40.0
+  },
+  "results": [
+    {
+      "sample_id": "P01_01_t104.0s_n30_i7",
+      "model": "gpt-4o",
+      "prediction": "1. **Turn on the stove**: The person has placed a pan on the stovetop, which suggests they will likely turn it on to start heating it.\n\n2. **Prepare ingredients on the cutting board**: With vegetables and a knife visible next to a cutting board, the next likely step is to chop or prepare ingredients for cooking.",
+      "ground_truth": "The person will pick up a cucumber and place it on the cutting board",
+      "processing_time_seconds": 38.352060317993164,
+      "tokens": {
+        "prompt_tokens": 33244,
+        "completion_tokens": 69,
+        "total_tokens": 33313,
+        "estimated_cost_usd": 0.0838
+      },
+      "accuracy_score": 40.0,
+      "judge_reasoning": "The prediction captures the context of cooking, which is relevant, but does not directly match the ground truth. The predicted actions focus on turning on the stove and preparing ingredients broadly, whereas the ground truth is specifically about picking up a cucumber and placing it on the cutting board. While there is some overlap due to the cooking context, the key action of 'pick up a cucumber and place it on the cutting board' is missed.",
+      "judge_model": "gpt-4o",
+      "timestamp": "2025-12-10T17:19:05.854449"
+    }
+  ]
+}

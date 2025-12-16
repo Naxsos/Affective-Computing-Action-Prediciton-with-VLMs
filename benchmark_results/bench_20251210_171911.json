@@ -1,0 +1,33 @@
+{
+  "run_id": "bench_20251210_171911",
+  "model": "gpt-4o-mini",
+  "prompt": "\n    You are analyzing a sequence of video frames from an egocentric (first-person) perspective.\n\n    Based on the sequence of actions visible in these frames, predict the next 2 most plausible actions the person will perform.\n\n    Format your response as:\n    1. [Most likely action]: Brief description\n    2. [Second most likely action]: Brief description\n\n    Be specific about the objects and actions involved.",
+  "start_time": "2025-12-10T17:19:11.189971",
+  "end_time": "2025-12-10T17:20:06.041056",
+  "summary": {
+    "total_samples": 1,
+    "total_tokens": 1105220,
+    "total_cost_usd": 0.1658172,
+    "avg_processing_time_seconds": 51.76427602767944,
+    "avg_accuracy_score": 60.0
+  },
+  "results": [
+    {
+      "sample_id": "P01_01_t104.0s_n30_i7",
+      "model": "gpt-4o-mini",
+      "prediction": "1. **[Chop vegetables]**: The person is likely to take the knife and start chopping the celery and cucumber on the green cutting board, preparing ingredients for cooking.\n\n2. **[Add oil to the pan]**: After chopping, the next action could be to pour oil into the frying pan on the stove, preparing it for cooking the already chopped vegetables.",
+      "ground_truth": "The person will pick up a cucumber and place it on the cutting board",
+      "processing_time_seconds": 51.76427602767944,
+      "tokens": {
+        "prompt_tokens": 1105144,
+        "completion_tokens": 76,
+        "total_tokens": 1105220,
+        "estimated_cost_usd": 0.1658172
+      },
+      "accuracy_score": 60.0,
+      "judge_reasoning": "The predicted actions include chopping the vegetables, which aligns with the ground truth of involving the cutting board and the cucumber. However, the prediction also includes additional actions such as adding oil to the pan, which is not mentioned in the ground truth. While the prediction captures some aspects of the ground truth, such as interaction with the cucumber and cutting board, it assumes subsequent actions that are not specified, resulting in a mostly correct prediction that misses details.",
+      "judge_model": "gpt-4o",
+      "timestamp": "2025-12-10T17:20:02.989521"
+    }
+  ]
+}
