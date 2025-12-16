@@ -1,272 +1,205 @@
 #!/usr/bin/env python3
 """
-Example script demonstrating how to use the VLM Benchmarking Pipeline.
+Extended Benchmark Script with Frame Ablation.
 
-This script shows how to:
-1. Configure samples with ground truth labels
-2. Run benchmarks across different models
-3. Compare results and generate visualizations
+Enhancements over original:
+- Supports ablation over max_images (number of frames)
+- Aggregates runtime, cost, and accuracy per frame count
+- Produces clearer, publication-ready plots
 
-Usage:
-    python run_benchmark.py
-    python run_benchmark.py --models gpt-4o gpt-4o-mini
-    python run_benchmark.py --compare
+This is a DROP-IN replacement / extension of the original run_benchmark.py.
 """
 
 import os
 import argparse
 from pathlib import Path
+from collections import defaultdict
+from typing import List, Dict, Any
 
-# Load .env file if it exists
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    pass  # python-dotenv not installed, skip
+    pass
 
 from benchmark import BenchmarkRunner
 from benchmark_visualizer import BenchmarkVisualizer
+import matplotlib.pyplot as plt
 
 
 # ============================================================================
-# Sample Configuration
+# Dataset Configuration (Video-based)
 # ============================================================================
 
-# Define your samples with ground truth labels for scoring
-# Each sample is a directory of frames with an optional ground truth action
+DATASET_DIR = "dataset"
 
-SAMPLE_CONFIGS = [
-    {
-        "id": "P01_01_t104.0s_n30_i7",
-        "image_dir": "output_frames/P01_01_t104.0s_n30_i7_20251124_112114",
-        "ground_truth": "The person will pick up a cucumber and place it on the cutting board"  # Update with actual ground truth
-    },
-]
-
-# Default prompt for action prediction
 DEFAULT_PROMPT = """
-    You are analyzing a sequence of video frames from an egocentric (first-person) perspective.
+You are analyzing a short egocentric video clip.
 
-    Based on the sequence of actions visible in these frames, predict the next 2 most plausible actions the person will perform.
+Based on the observed frames, predict the NEXT most likely action.
+Respond ONLY in the following format:
 
-    Format your response as:
-    1. [Most likely action]: Brief description
-    2. [Second most likely action]: Brief description
+Verb: <verb>
+Noun: <noun>
+"""
 
-    Be specific about the objects and actions involved."""
+
+def load_video_dataset(dataset_dir: str) -> List[Dict[str, Any]]:
+    """
+    Load videos from a dataset directory.
+    Expected filename format: verb_noun.mov
+    """
+    samples = []
+
+    for video_path in Path(dataset_dir).glob("*.mov"):
+        name = video_path.stem  # verb_noun
+        if "_" not in name:
+            raise ValueError(f"Invalid filename (expected verb_noun.mov): {video_path.name}")
+
+        verb, noun = name.split("_", 1)
+
+        samples.append({
+            "id": name,
+            "video_path": str(video_path),
+            "ground_truth": {
+                "verb": verb,
+                "noun": noun,
+                "text": f"{verb} {noun}",
+            },
+        })
+
+    if not samples:
+        raise RuntimeError(f"No .mov files found in {dataset_dir}")
+
+    return samples
 
 
 # ============================================================================
-# Benchmark Functions
+# Ablation Benchmark
 # ============================================================================
 
-def run_single_model_benchmark(
-    model: str = "gpt-4o",
-    samples: list = None,
-    prompt: str = None,
+def run_frame_ablation(
+    model: str,
+    samples: List[Dict[str, Any]],
+    prompt: str,
+    max_images_list: List[int],
     output_dir: str = "benchmark_results",
-    max_images: int = None
-):
-    """Run benchmark with a single model."""
-    samples = samples or SAMPLE_CONFIGS
-    prompt = prompt or DEFAULT_PROMPT
-    
-    print(f"\n🚀 Running benchmark with model: {model}")
-    print(f"   Samples: {len(samples)}")
-    
+) -> List[str]:
+    """
+    Run an ablation study over different numbers of input frames.
+    """
+
+    print("\n🔬 Running frame ablation study")
+    print(f"   Model: {model}")
+    print(f"   Frame counts: {max_images_list}")
+
     runner = BenchmarkRunner(
         prediction_model=model,
-        judge_model="gpt-4o"  # Use cheaper model for judging
+        judge_model="gpt-4o-mini"
     )
-    
-    benchmark = runner.run_benchmark(
-        samples=samples,
-        prompt=prompt,
-        max_images=max_images,
-        verbose=True
-    )
-    
-    # Save results
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    results_file = output_path / f"{benchmark.run_id}.json"
-    runner.save_results(benchmark, str(results_file))
-    
-    # Generate visualizations
-    visualizer = BenchmarkVisualizer()
-    visualizer.plot_single_run(benchmark, output_dir=str(output_path))
-    
-    return benchmark, str(results_file)
 
+    aggregated = defaultdict(list)
+    run_files = []
 
-def run_multi_model_comparison(
-    models: list[str] = None,
-    samples: list = None,
-    prompt: str = None,
-    output_dir: str = "benchmark_results"
-):
-    """Run benchmark across multiple models and compare."""
-    models = models or ["gpt-4o", "gpt-4o-mini"]
-    samples = samples or SAMPLE_CONFIGS
-    prompt = prompt or DEFAULT_PROMPT
-    
-    print(f"\n🔬 Running multi-model comparison")
-    print(f"   Models: {models}")
-    print(f"   Samples: {len(samples)}")
-    
-    result_files = []
-    
-    for model in models:
-        _, result_file = run_single_model_benchmark(
-            model=model,
+    for max_images in max_images_list:
+        print(f"\n➡️  max_images = {max_images}")
+
+        benchmark = runner.run_benchmark(
             samples=samples,
             prompt=prompt,
-            output_dir=output_dir
+            max_images=max_images,
+            verbose=True
         )
-        result_files.append(result_file)
-    
-    # Generate comparison plot
-    if len(result_files) > 1:
-        visualizer = BenchmarkVisualizer()
-        visualizer.compare_runs(result_files, output_dir=output_dir)
-    
-    return result_files
 
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        result_file = output_path / f"{benchmark.run_id}_n{max_images}.json"
+        runner.save_results(benchmark, str(result_file))
+        run_files.append(str(result_file))
 
-def quick_test(image_dir: str = None, ground_truth: str = None):
-    """Run a quick test on a single directory."""
-    if image_dir is None:
-        # Use first available sample
-        sample_dir = Path("output_frames")
-        if sample_dir.exists():
-            subdirs = [d for d in sample_dir.iterdir() if d.is_dir()]
-            if subdirs:
-                image_dir = str(subdirs[0])
-            else:
-                print("❌ No sample directories found in output_frames/")
-                return
-        else:
-            print("❌ No output_frames directory found. Run extract_frames.py first.")
-            return
-    
-    samples = [{
-        "id": Path(image_dir).name,
-        "image_dir": image_dir,
-        "ground_truth": ground_truth or "No ground truth provided"
-    }]
-    
-    run_single_model_benchmark(
-        model="gpt-4o-mini",  # Use cheaper model for quick test
-        samples=samples,
-        max_images=10  # Limit images for faster test
-    )
+        aggregated["max_images"].append(max_images)
+        aggregated["avg_runtime"].append(benchmark.avg_processing_time)
+        aggregated["avg_cost"].append(benchmark.total_cost_usd / benchmark.total_samples)
+        aggregated["avg_accuracy"].append(benchmark.avg_accuracy)
+
+    _plot_ablation(aggregated, output_dir)
+    return run_files
 
 
 # ============================================================================
-# CLI Interface
+# Plotting
+# ============================================================================
+
+def _plot_ablation(stats: Dict[str, List], output_dir: str):
+    """Generate ablation study plots."""
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Runtime
+    plt.figure(figsize=(7, 4))
+    plt.plot(stats["max_images"], stats["avg_runtime"], marker="o")
+    plt.xlabel("Number of Frames")
+    plt.ylabel("Avg Runtime (s)")
+    plt.title("Runtime vs Number of Frames")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(Path(output_dir) / "ablation_runtime.png", dpi=150)
+    plt.close()
+
+    # Cost
+    plt.figure(figsize=(7, 4))
+    plt.plot(stats["max_images"], stats["avg_cost"], marker="o")
+    plt.xlabel("Number of Frames")
+    plt.ylabel("Avg Cost per Sample ($)")
+    plt.title("Cost vs Number of Frames")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(Path(output_dir) / "ablation_cost.png", dpi=150)
+    plt.close()
+
+    # Accuracy
+    if all(v is not None for v in stats["avg_accuracy"]):
+        plt.figure(figsize=(7, 4))
+        plt.plot(stats["max_images"], stats["avg_accuracy"], marker="o")
+        plt.xlabel("Number of Frames")
+        plt.ylabel("Avg Accuracy (LLM Judge)")
+        plt.title("Accuracy vs Number of Frames")
+        plt.ylim(0, 100)
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(Path(output_dir) / "ablation_accuracy.png", dpi=150)
+        plt.close()
+
+    print(f"📊 Ablation plots saved to {output_dir}/")
+
+
+# ============================================================================
+# CLI
 # ============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run VLM action prediction benchmarks.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Quick test with a single directory
-  python run_benchmark.py --quick-test output_frames/P01_01_t104.0s_n20_i5_20251124_111814
+    parser = argparse.ArgumentParser(description="Extended VLM Benchmark with Frame Ablation")
 
-  # Run benchmark with default samples
-  python run_benchmark.py
+    parser.add_argument("--model", default="gpt-4o")
+    parser.add_argument("--frames", nargs="+", type=int, default=[4, 8, 16])
+    parser.add_argument("--output", default="benchmark_results")
+    parser.add_argument("-p", "--prompt", default=None)
 
-  # Compare multiple models
-  python run_benchmark.py --compare --models gpt-4o gpt-4o-mini
-
-  # Custom prompt
-  python run_benchmark.py -p "What will happen next in this video?"
-        """
-    )
-    
-    parser.add_argument(
-        "--quick-test",
-        type=str,
-        nargs='?',
-        const='auto',
-        help="Run a quick test on a single directory (uses first available if not specified)"
-    )
-    parser.add_argument(
-        "--compare",
-        action="store_true",
-        help="Run comparison across multiple models"
-    )
-    parser.add_argument(
-        "--models",
-        nargs='+',
-        default=["gpt-4o"],
-        help="Model(s) to benchmark (default: gpt-4o)"
-    )
-    parser.add_argument(
-        "-p", "--prompt",
-        type=str,
-        default=None,
-        help="Custom prediction prompt"
-    )
-    parser.add_argument(
-        "-o", "--output",
-        type=str,
-        default="benchmark_results",
-        help="Output directory (default: benchmark_results)"
-    )
-    parser.add_argument(
-        "-n", "--max-images",
-        type=int,
-        default=None,
-        help="Maximum images per sample"
-    )
-    parser.add_argument(
-        "--ground-truth",
-        type=str,
-        default=None,
-        help="Ground truth for quick test"
-    )
-    
     args = parser.parse_args()
-    
-    # Check for API key
+
     if not os.getenv("OPENAI_API_KEY"):
-        print("\n❌ Error: OPENAI_API_KEY environment variable not set.")
-        print("\n💡 Set it with:")
-        print("   export OPENAI_API_KEY='your-api-key-here'")
-        return 1
-    
-    try:
-        if args.quick_test:
-            image_dir = None if args.quick_test == 'auto' else args.quick_test
-            quick_test(image_dir, args.ground_truth)
-        elif args.compare:
-            run_multi_model_comparison(
-                models=args.models,
-                prompt=args.prompt,
-                output_dir=args.output
-            )
-        else:
-            for model in args.models:
-                run_single_model_benchmark(
-                    model=model,
-                    prompt=args.prompt,
-                    output_dir=args.output,
-                    max_images=args.max_images
-                )
-        
-        print(f"\n✅ Benchmark complete! Results saved to: {args.output}/")
-        return 0
-        
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+        raise RuntimeError("OPENAI_API_KEY not set")
+
+    # Load dataset
+    samples = load_video_dataset(DATASET_DIR)
+
+    run_frame_ablation(
+        model=args.model,
+        samples=samples,
+        prompt=args.prompt or DEFAULT_PROMPT,
+        max_images_list=args.frames,
+        output_dir=args.output
+    )
 
 
 if __name__ == "__main__":
-    exit(main())
-
+    main()
